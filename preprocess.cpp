@@ -1,4 +1,5 @@
 ﻿#include "preprocess.h"
+RNG rng(12345);
 
 Preprocess::Preprocess(const Mat & im){
   source_image = im;
@@ -22,54 +23,61 @@ Mat Preprocess::get_invert() const{
 }
 
 void Preprocess::rgb2gray(){
-  cvtColor(result_image, result_image, COLOR_RGB2GRAY);
-  cvtColor(invert_image, invert_image, COLOR_RGB2GRAY);
+  rgb2gray(result_image);
+  rgb2gray(invert_image);
+  //cvtColor(result_image, result_image, COLOR_RGB2GRAY);
+  //cvtColor(invert_image, invert_image, COLOR_RGB2GRAY);
 }
 
-void Preprocess::rgb2gray(Mat& image){
+void Preprocess::rgb2gray(Mat& image, int const thresh){
   cvtColor(image, image, COLOR_RGB2GRAY);
 }
 
-void Preprocess::binarization(Mat& image){
+void Preprocess::binarization(Mat& image, int const thresh){
   threshold(image, image, 180, 255, 3);
 }
 
 /*
-threshold for binarization
+Binarization: Choose the suitable threshold. Important
 */
-void Preprocess::binarization(int thresh = 180){
+void Preprocess::binarization(int const thresh){
+  binarization(result_image, thresh);
+  binarization(invert_image,thresh-60);
+  /*
   threshold(result_image, result_image, thresh, 255, CV_THRESH_BINARY);
   threshold(invert_image, invert_image, thresh - 60, 255, CV_THRESH_BINARY);
+  */
 }
 
-void Preprocess::gaussion_blur(int size = 5){
-  GaussianBlur(result_image, result_image, Size(size, size), 0, 0);
-  GaussianBlur(invert_image, invert_image, Size(size, size), 0, 0);
+void Preprocess::gaussion_blur(int const size){
+  gaussion_blur(result_image, size); 
+  gaussion_blur(invert_image, size);
 }
-void Preprocess::gaussion_blur(Mat &image, int size = 5){
+
+void Preprocess::gaussion_blur(Mat &image, int const size){
   GaussianBlur(image, image, Size(size, size), 0, 0);
 }
 
-// 0, 3 for B
-void Preprocess::erosion(int erosion_type = 0, int erosion_size = 3){
+
+void Preprocess::erosion(int const erosion_type, int const erosion_size){
   Mat element = getStructuringElement(erosion_type,
     Size(2 * erosion_size + 1, 2 * erosion_size + 1),
     Point(erosion_size, erosion_size));
   erode(result_image, result_image, element);
 }
 
-void Preprocess::dilation(int dilation_type, int dilation_size){
+void Preprocess::dilation(int const dilation_type, int const dilation_size){
   Mat element = getStructuringElement(dilation_type,
     Size(2 * dilation_size + 1, 2 * dilation_size + 1),
     Point(dilation_size, dilation_size));
   dilate(result_image, result_image, element);
 }
+
 void Preprocess::generate_invert(){
   bitwise_not(result_image, invert_image);
-  //binarization(invert_image);
 }
 
-void Preprocess::morphology(Mat& image, int size = 5){
+void Preprocess::morphology(Mat& image, int const size){
   Mat element = getStructuringElement(0, Size(2 * size + 1, 2 * size + 1), Point(size, size));
   morphologyEx(image, image, 5, element);
 }
@@ -88,39 +96,28 @@ bool Preprocess::background(){
 }
 
 /*
-important thresholds for mophology
-how to set in different cases????
+Set the thresholds for mophology. Important
+Decide by the image color (code container color pattern)
 */
 void Preprocess::process(){
-  gaussion_blur();
-  rgb2gray();
+  gaussion_blur(result_image);
+  rgb2gray(result_image);
   generate_invert();
-  //rgb2gray(invert_image);
-  //rgb2gray();
 
-  binarization();
+  //binarization();
+  //imwrite("result.jpg", result_image);
+  //imwrite("invert.jpg", invert_image);
   morphology(result_image, 15);
+  imwrite("result.jpg",result_image);
   morphology(invert_image, 14);
-  ////gaussion_blur();
-  //if (background()){
-  //  morphology(result_image, 14);
-  //  morphology(invert_image, 15);
-  //}
-  //else{
-  //  cout << "Here" << endl;
-  //  morphology(result_image, 15);
-  //  morphology(invert_image, 5);
-  //}
-  imwrite("bw1.jpg", result_image);
-  imwrite("bw2.jpg", invert_image);
+  imwrite("invert.jpg", invert_image);
+
 }
 
-vector<vector<Rect> > Preprocess::combine_rect(vector<Rect> rects){
-  //sort the rects with axis: y
-  std::sort(rects.begin(), rects.end(), [](const Rect& lhs, const Rect& rhs)
-  {
-    return lhs.y < rhs.y;
-  });
+/*
+All the Rectangle Area are cluster
+*/
+vector<vector<Rect> > Preprocess::ClusterRectOnY(vector<Rect> rects){
 
   //combine rects with same level asix y (vertical)
   //condition: 1. threshold diff on y,
@@ -128,43 +125,34 @@ vector<vector<Rect> > Preprocess::combine_rect(vector<Rect> rects){
   //           3. 
   vector<vector<Rect> > box_rects;
   vector<Rect> box;
-  int compy1, compy2;// , compx1, compx2;
-
-  Mat drawing = Mat::zeros(source_image.size(), CV_8UC3);
-
-  for (int i = 0; i < rects.size(); i++) //rects.size()
+  int compy1, compy2;
+  int distance;
+  std::sort(rects.begin(), rects.end(), [](const Rect& lhs, const Rect& rhs)
   {
-    //cout << rects[i].y << endl;
-    //if (rects[i].y <= 260 && rects[i].y >= 240){
-    Scalar color = Scalar(rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255));
-    rectangle(drawing, rects[i].tl(), rects[i].br(), color, 2, 8, 0);
-    //}
-  }
-  namedWindow("Contour", CV_WINDOW_AUTOSIZE);// NORMAL);
-  imshow("Contour", drawing);
+    return lhs.y < rhs.y;
+  });
+
   for (int i = 0; i < rects.size(); i++)
   {
-    if (i == 13){
-      i = i;
-    }
     if (box.size() == 0){
       box.push_back(rects[i]);
       compy1 = rects[i].y;
+      distance = rects[i].height;
     }
     else{
       compy2 = rects[i].y;
       /*
       threshold for the y difference (上下交错程度，对齐程度)？？？ 1/2 height
       */
-      if (close(compy1, compy2, rects[i].height / 4)){
+      if (close(compy1, compy2, distance / 4)){
         box.push_back(rects[i]);
         compy1 = rects[i].y;
+        distance = rects[i].height;
       }
       else{
-        vector<Rect> cand_box = filter_rects(box);
-        vector<vector<Rect> > cand_boxes = split_rects(cand_box);
+        vector<Rect> cand_box = FilterRectsOnY(box);
+        vector<vector<Rect> > cand_boxes = SplitRectsOnY(cand_box);
         box_rects.insert(box_rects.end(), cand_boxes.begin(), cand_boxes.end());
-        //box_rects.push_back(filter_rects(box));
         box.clear();
         i--;
       }
@@ -176,32 +164,87 @@ vector<vector<Rect> > Preprocess::combine_rect(vector<Rect> rects){
   return box_rects;
 }
 
-vector<Rect> Preprocess::filter_rects(vector<Rect> box){
+vector<vector<Rect> > Preprocess::ClusterRectOnX(vector<Rect> rects){
+  vector<vector<Rect> > box_rects;
+  vector<Rect> box;
+  int compx1, compx2;
+  int distance;
+  sort(rects.begin(), rects.end(), [](const Rect& lhs, const Rect& rhs)
+  {
+    return lhs.x < rhs.x;
+  });
+  for (int i = 0; i < rects.size(); i++){
+    if (box.size() == 0){
+      box.push_back(rects[i]);
+      compx1 = rects[i].x;
+      distance = rects[i].width;
+    }
+    else{
+      compx2 = rects[i].x;
+      if (close(compx1, compx2, distance / 2)){
+        box.push_back(rects[i]);
+        compx1 = rects[i].x;
+        distance = rects[i].width;
+      }
+      else{
+        vector<Rect> cand_box = FilterRectsOnX(box);
+        vector<vector<Rect> > cand_boxes = SplitRectsOnX(cand_box);
+        box_rects.insert(box_rects.end(), cand_boxes.begin(), cand_boxes.end());
+        box.clear();
+        i--;
+      }
+    }
+  }
+  if (box.size() >= 0)
+    box_rects.push_back(box);
+  return box_rects;
+}
+
+vector<Rect> Preprocess::FilterRectsOnY(vector<Rect> box){
   int height = 0;
   for (const auto rect : box){
     height += rect.height;
   }
   height /= box.size();
-  vector<Rect> filt_box;
+  vector<Rect> filter_box;
   for (const auto rect : box){
     /*
     threshold for the height consistency in a group (y-axis) 0.25-1.75 average
     */
     if (rect.height > 0.75*height && rect.height < 1.25*height)
-      filt_box.push_back(rect);
+      filter_box.push_back(rect);
   }
-  return filt_box;
+  return filter_box;
 }
 
-vector<vector<Rect> > Preprocess::split_rects(vector<Rect> rects){
-  sort(rects.begin(), rects.end(), [](const Rect& lhs, const Rect& rhs)
-  {
-    return lhs.x < rhs.x;
-  });
+vector<Rect> Preprocess::FilterRectsOnX(vector<Rect> box){
+  int width = 0;
+  for (const auto rect : box){
+    width += rect.width;
+  }
+  width /= box.size();
+  vector<Rect> filter_box;
+  for (const auto rect : box){
+    /*
+    threshold for the width consistency in a group (x-axis) 0.25-1.75 average
+    */
+    if (rect.height > 0.75*width && rect.height < 1.25*width)
+      filter_box.push_back(rect);
+  }
+  return filter_box;
+}
+
+vector<vector<Rect> > Preprocess::SplitRectsOnY(vector<Rect> rects){
   vector<vector<Rect> > box_rects;
   vector<Rect> box;
   int compx1, compx2;
   int width;
+
+  sort(rects.begin(), rects.end(), [](const Rect& lhs, const Rect& rhs)
+  {
+    return lhs.x < rhs.x;
+  });
+
   for (int i = 0; i < rects.size(); i++)
   {
     if (box.size() == 0){
@@ -232,11 +275,48 @@ vector<vector<Rect> > Preprocess::split_rects(vector<Rect> rects){
   return box_rects;
 }
 
-void Preprocess::position_filter(Rect text_religon){
+vector<vector<Rect> > Preprocess::SplitRectsOnX(vector<Rect> rects){
+  vector<vector<Rect> > box_rects;
+  vector<Rect> box;
+  int compy1, compy2;
+  int height;
 
+  sort(rects.begin(), rects.end(), [](const Rect& lhs, const Rect& rhs)
+  {
+    return lhs.y < rhs.y;
+  });
+
+  for (int i = 0; i < rects.size(); i++)
+  {
+    if (box.size() == 0){
+      box.push_back(rects[i]);
+      compy1 = rects[i].y;
+      height = rects[i].height;
+    }
+    else{
+      compy2 = rects[i].y;
+      /*
+      Threshold for the distance between objects in x-axis
+      */
+      int max_height = max(height, rects[i].height);
+      if (close(compy1, compy2, 3 * max_height)){
+        box.push_back(rects[i]);
+        compy1 = rects[i].y;
+        height = rects[i].height;
+      }
+      else{
+        box_rects.push_back(box);
+        box.clear();
+        i--;
+      }
+    }
+  }
+  if (box.size() >= 0)
+    box_rects.push_back(box);
+  return box_rects;
 }
 
-vector<Mat> Preprocess::text_area_candidates(Mat image, int thresh = 170){
+vector<Mat> Preprocess::TextAreaCandidateOnY(Mat image, int thresh){
   Mat canny_output;
   vector<vector<Point> > contours;
   vector<Vec4i> hierarchy;
@@ -246,14 +326,13 @@ vector<Mat> Preprocess::text_area_candidates(Mat image, int thresh = 170){
   /// Find contours
   findContours(canny_output, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
   /// Approximate contours to polygons + get bounding rects and circles
-  vector<vector<Point> > contours_poly(contours.size());
+  vector<Point> contours_poly;
   vector<Rect> boundRect;
-  vector<int> boundRectArea;
 
   for (int i = 0; i < contours.size(); i++)
   {
-    approxPolyDP(Mat(contours[i]), contours_poly[i], 3, true);
-    Rect rect = boundingRect(Mat(contours_poly[i]));
+    approxPolyDP(Mat(contours[i]), contours_poly, 3, true);
+    Rect rect = boundingRect(Mat(contours_poly));
     //cout << rect.height << endl;
     /*
     threshold for size of the objects important !!!!!!!!!!
@@ -263,31 +342,129 @@ vector<Mat> Preprocess::text_area_candidates(Mat image, int thresh = 170){
       boundRect.push_back(rect);
     }
   }
-
-
-  vector<vector<Rect> > box_rects = combine_rect(boundRect);
-  vector<Mat> text_religon;
+  vector<vector<Rect> > box_rects = ClusterRectOnY(boundRect);
+  vector<Mat> text_region;
   for (int i = 0; i < box_rects.size(); i++){
-    Rect religion = combinex(box_rects[i]);
+    Rect religion = CombineRects(box_rects[i]);
     //Rect religion = syscombine(box_rects[i]);
     if (religion.height>source_image.rows || religion.width>source_image.cols ||
       religion.x<1 || religion.y<1 || religion.x>source_image.cols || religion.y>source_image.rows)
       continue;
-    text_religon.push_back(Mat(source_image, religion));
+    text_region.push_back(Mat(source_image, religion));
   }
 
-  sort(text_religon.begin(), text_religon.end(), [](const Mat& lhs, const Mat& rhs)
+  sort(text_region.begin(), text_region.end(), [](const Mat& lhs, const Mat& rhs)
   {
     return lhs.cols > rhs.cols;
   });
   vector<Mat> candidates;
-  int min = (3 < text_religon.size() ? 3 : text_religon.size());
+  int min = (3 < text_region.size() ? 3 : text_region.size());
   for (int i = 0; i < min; i++){
-    candidates.push_back(text_religon[i]);
-    //namedWindow("Religion" + to_string(i), CV_WINDOW_AUTOSIZE);
-    //imshow("Religion" + to_string(i), text_religon[i]);
+    candidates.push_back(text_region[i]);
   }
   return candidates;
+}
+
+
+void Preprocess::TextAreaCandidateOnY_draw(Mat image, char* filename, int thresh){
+  Mat canny_output;
+  vector<vector<Point> > contours;
+  vector<Vec4i> hierarchy;
+  // Detect edges using canny
+  //threshold(result_image, canny_output, thresh, 255, THRESH_BINARY);
+  Canny(image, canny_output, thresh, thresh * 2, 3);
+  /// Find contours
+  findContours(canny_output, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
+  /// Approximate contours to polygons + get bounding rects and circles
+  vector<Point> contours_poly;
+  vector<Rect> boundRect;
+
+  for (int i = 0; i < contours.size(); i++)
+  {
+    approxPolyDP(Mat(contours[i]), contours_poly, 3, true);
+    Rect rect = boundingRect(Mat(contours_poly));
+    //cout << rect.height << endl;
+    /*
+    threshold for size of the objects important !!!!!!!!!!
+    */
+    if (rect.height>40 && rect.height < 150){
+      //if (rect.height>10){
+      boundRect.push_back(rect);
+    }
+  }
+  vector<vector<Rect> > box_rects = ClusterRectOnY(boundRect);
+  vector<Rect> text_region;
+  for (int i = 0; i < box_rects.size(); i++){
+    Rect religion = CombineRects(box_rects[i]);
+    //Rect religion = syscombine(box_rects[i]);
+    if (religion.height>source_image.rows || religion.width>source_image.cols ||
+      religion.x<1 || religion.y<1 || religion.x>source_image.cols || religion.y>source_image.rows)
+      continue;
+    text_region.push_back(religion);
+  }
+
+  sort(text_region.begin(), text_region.end(), [](const Rect& lhs, const Rect& rhs)
+  {
+    return lhs.width > rhs.width;
+  });
+
+  //vector<Mat> candidates;
+  int min = (3 < text_region.size() ? 3 : text_region.size());
+  for (int i = 0; i < min; i++){
+    Scalar color = Scalar(0, 255, 255);// rng.uniform(0, 255), rng.uniform(0, 255));
+    rectangle(source_image, text_region[i].tl(), text_region[i].br(), color, 5, 8, 0);
+  }
+  namedWindow("Contours", CV_WINDOW_NORMAL);
+  imshow("Contours", source_image);
+  //cout << filename << endl;
+  imwrite(filename, source_image);
+  
+}
+
+vector<Mat> Preprocess::TextAreaCandidateOnX(Mat image, int thresh){
+  Mat canny_output;
+  vector<vector<Point> > contours;
+  vector<Vec4i> hierarchy;
+  Canny(image, canny_output, thresh, thresh * 2, 3);
+  findContours(canny_output, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
+
+  vector<Point> contours_poly;
+  vector<Rect> boundRect;
+
+  for (int i = 0; i < contours.size(); i++)
+  {
+    approxPolyDP(Mat(contours[i]), contours_poly, 3, true);
+    Rect rect = boundingRect(Mat(contours_poly));
+    /*
+    threshold for size of the objects important !!!!!!!!!!
+    */
+    if (rect.height>40 && rect.height < 150){
+      //if (rect.height>10){
+      boundRect.push_back(rect);
+    }
+  }
+  vector<vector<Rect> > box_rects = ClusterRectOnX(boundRect);
+  vector<Mat> text_region;
+  for (int i = 0; i < box_rects.size(); i++){
+    Rect religion = CombineRects(box_rects[i]);
+    //Rect religion = syscombine(box_rects[i]);
+    if (religion.height>source_image.rows || religion.width>source_image.cols ||
+      religion.x<1 || religion.y<1 || religion.x>source_image.cols || religion.y>source_image.rows)
+      continue;
+    text_region.push_back(Mat(source_image, religion));
+  }
+
+  sort(text_region.begin(), text_region.end(), [](const Mat& lhs, const Mat& rhs)
+  {
+    return lhs.cols > rhs.cols;
+  });
+  vector<Mat> candidates;
+  int min = (3 < text_region.size() ? 3 : text_region.size());
+  for (int i = 0; i < min; i++){
+    candidates.push_back(text_region[i]);
+  }
+  return candidates;
+
 }
 
 bool Preprocess::close(int v1, int v2, int thresh){
@@ -296,7 +473,7 @@ bool Preprocess::close(int v1, int v2, int thresh){
   return false;
 }
 
-Rect Preprocess::combinex(vector<Rect> rects){
+Rect Preprocess::CombineRects(vector<Rect> rects){
   int minx = INT_MAX, miny = INT_MAX, maxx = -1, maxy = -1;
   for (const auto& rect : rects){
     if (minx > rect.tl().x)
@@ -311,7 +488,7 @@ Rect Preprocess::combinex(vector<Rect> rects){
   return Rect(Point(minx, miny), Point(maxx, maxy));
 }
 
-Rect Preprocess::syscombine(vector<Rect> rects){
+Rect Preprocess::CombineRectsOpencv(vector<Rect> rects){
   vector<Point> points;
   for (auto rect : rects){
     points.push_back(rect.tl());

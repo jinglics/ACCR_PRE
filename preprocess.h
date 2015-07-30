@@ -6,84 +6,65 @@
 #include <cmath>
 using namespace std;
 using namespace cv;
-RNG rng(12345);
 
 class Preprocess{
-  Mat source_image, result_image, invert_image;
+
 public:
-  Preprocess(const Mat & im){
-  }
-  ~Preprocess(){
+  Preprocess(const Mat & im);
 
-  }
+  ~Preprocess();
 
-  Mat get_source() const{
-  }
+  Mat get_source() const;
 
-  Mat get_result() const{
-  }
+  Mat get_result() const;
 
-  Mat get_invert() const{
-  }
+  Mat get_invert() const;
 
-  void rgb2gray(){
-  }
+  void rgb2gray();
 
-  void rgb2gray(Mat& image){
-  }
+  void rgb2gray(Mat& image, int const thresh = 180);
 
-  void binarization(Mat& image){
-  }
+  void binarization(int const thresh = 180);
 
-  void binarization(int thresh = 180){
-  }
+  void binarization(Mat& image, int const thresh = 180);
 
-  void gaussion_blur(int size = 5){
-  }
-  void gaussion_blur(Mat &image, int size = 5){
-  }
+  void gaussion_blur(int const size = 5);
 
-  void erosion(int erosion_type = 0, int erosion_size = 3){
-     }
+  void gaussion_blur(Mat &image, int const size = 5);
 
-  void dilation(int dilation_type, int dilation_size){
-   }
+  void erosion(int const erosion_type = 0, int const erosion_size = 3);
 
-  void generate_invert(){
-     }
+  void dilation(int const dilation_type, int const dilation_size);
 
-  void morphology(Mat& image, int size = 5){
-  }
+  void generate_invert();
 
-  bool background(){
-  }
+  void morphology(Mat& image, int const size = 5);
 
-  void process(){
-  }
+  bool background();
 
-  vector<vector<Rect> > combine_rect(vector<Rect> rects){
-  }
+  void process();
 
-  vector<Rect> filter_rects(vector<Rect> box){
-  }
+  vector<vector<Rect> > ClusterRectOnY(vector<Rect> rects);
+  vector<vector<Rect> > ClusterRectOnX(vector<Rect> rects);
 
-  vector<vector<Rect> > split_rects(vector<Rect> rects){
-  }
+  vector<Rect> FilterRectsOnY(vector<Rect> box);
+  vector<Rect> FilterRectsOnX(vector<Rect> box);
+
+  vector<vector<Rect> > SplitRectsOnY(vector<Rect> rects);
+  vector<vector<Rect> > SplitRectsOnX(vector<Rect> rects);
+
+  Rect CombineRects(vector<Rect> rects);
+
+  Rect CombineRectsOpencv(vector<Rect> rects);
+
+  vector<Mat> TextAreaCandidateOnY(Mat image, int thresh = 170);
+  vector<Mat> TextAreaCandidateOnX(Mat image, int thresh = 170);
+
+  void TextAreaCandidateOnY_draw(Mat image, char* filename, int thresh = 170);
+
+  bool close(int v1, int v2, int distance);
 
 
-  void position_filter(Rect text_religon){
-  }
-
-  vector<Mat> text_area_candidates(Mat image, int thresh = 170){
-  }
-
-  bool close(int v1, int v2, int thresh){
-  }
-
-  Rect combinex(vector<Rect> rects){
-  }
-
-  Rect syscombine(vector<Rect> rects){
-  }
-
+private:
+  Mat source_image, result_image, invert_image;
 };
